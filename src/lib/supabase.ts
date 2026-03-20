@@ -28,12 +28,35 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface Party {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface Position {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface City {
+  id: string;
+  name: string;
+  region_id?: string;
+  created_at: string;
+}
+
 export interface Candidate {
   id: string;
   name: string;
-  party: string;
-  position: string;
-  city: string;
+  party_id: string;
+  position_id: string;
+  city_id: string;
+  // Optional relations for select/join
+  parties?: Party;
+  positions?: Position;
+  cities?: City;
   number: string;
   photo_url: string;
   status: string;

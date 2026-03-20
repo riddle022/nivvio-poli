@@ -1,41 +1,65 @@
 import { useState, useEffect } from 'react';
-import { supabase, Candidate } from '../lib/supabase';
+import { supabase, Candidate, Party, Position, City } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, CreditCard as Edit, Save, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, X } from 'lucide-react';
 
 export default function CadastrarCandidatos() {
   const { user } = useAuth();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [parties, setParties] = useState<Party[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    party: '',
-    position: '',
-    city: '',
+    party_id: '',
+    position_id: '',
+    city_id: '',
     number: '',
     status: 'Ativo',
   });
 
   useEffect(() => {
     loadCandidates();
+    loadOptions();
   }, []);
+
+  const loadOptions = async () => {
+    const [
+      { data: partiesData },
+      { data: positionsData },
+      { data: citiesData }
+    ] = await Promise.all([
+      supabase.from('parties').select('*').order('name'),
+      supabase.from('positions').select('*').order('name'),
+      supabase.from('cities').select('*').order('name'),
+    ]);
+
+    if (partiesData) setParties(partiesData);
+    if (positionsData) setPositions(positionsData);
+    if (citiesData) setCities(citiesData);
+  };
 
   const loadCandidates = async () => {
     const { data, error } = await supabase
       .from('candidates')
-      .select('*')
+      .select('*, parties(*), positions(*), cities(*)')
       .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Erro ao carregar candidatos:', error);
     } else if (data) {
-      setCandidates(data);
+      setCandidates(data as Candidate[]);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      alert('Sessão expirada. Por favor, faça login novamente.');
+      return;
+    }
     setLoading(true);
 
     if (editingId) {
@@ -55,8 +79,13 @@ export default function CadastrarCandidatos() {
     } else {
       const { error } = await supabase.from('candidates').insert([
         {
-          ...formData,
-          created_by: user?.id,
+          name: formData.name,
+          party_id: formData.party_id,
+          position_id: formData.position_id,
+          city_id: formData.city_id,
+          number: formData.number,
+          status: formData.status,
+          created_by: user.id,
         },
       ]);
 
@@ -76,12 +105,50 @@ export default function CadastrarCandidatos() {
     setEditingId(candidate.id);
     setFormData({
       name: candidate.name,
-      party: candidate.party,
-      position: candidate.position,
-      city: candidate.city,
+      party_id: candidate.party_id,
+      position_id: candidate.position_id,
+      city_id: candidate.city_id,
       number: candidate.number,
       status: candidate.status,
     });
+  };
+
+  const handleAddParty = async () => {
+    const name = prompt('Nome do novo partido:');
+    if (!name) return;
+
+    const { data, error } = await supabase
+      .from('parties')
+      .insert([{ name }])
+      .select()
+      .single();
+
+    if (error) {
+      alert('Erro ao cadastrar partido');
+      console.error(error);
+    } else {
+      setParties([...parties, data as Party]);
+      setFormData(prev => ({ ...prev, party_id: data.id }));
+    }
+  };
+
+  const handleAddPosition = async () => {
+    const name = prompt('Nome do novo cargo:');
+    if (!name) return;
+
+    const { data, error } = await supabase
+      .from('positions')
+      .insert([{ name }])
+      .select()
+      .single();
+
+    if (error) {
+      alert('Erro ao cadastrar cargo');
+      console.error(error);
+    } else {
+      setPositions([...positions, data as Position]);
+      setFormData(prev => ({ ...prev, position_id: data.id }));
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -100,9 +167,9 @@ export default function CadastrarCandidatos() {
   const resetForm = () => {
     setFormData({
       name: '',
-      party: '',
-      position: '',
-      city: '',
+      party_id: '',
+      position_id: '',
+      city_id: '',
       number: '',
       status: 'Ativo',
     });
@@ -141,49 +208,69 @@ export default function CadastrarCandidatos() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Partido
                 </label>
-                <input
-                  type="text"
-                  value={formData.party}
-                  onChange={(e) => setFormData({ ...formData, party: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
-                  placeholder="Ex: PT, PSDB, MDB..."
-                  required
-                />
+                <div className="flex gap-2">
+                  <select
+                    value={formData.party_id}
+                    onChange={(e) => setFormData({ ...formData, party_id: e.target.value })}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
+                    required
+                  >
+                    <option value="">Selecione...</option>
+                    {parties.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddParty}
+                    className="p-2 bg-[#def3cd] text-[#1a3d2a] rounded-lg hover:bg-[#cde4bc] transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Cargo
                 </label>
-                <select
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
-                  required
-                >
-                  <option value="">Selecione...</option>
-                  <option value="Vereador">Vereador</option>
-                  <option value="Prefeito">Prefeito</option>
-                  <option value="Vice-Prefeito">Vice-Prefeito</option>
-                  <option value="Deputado Estadual">Deputado Estadual</option>
-                  <option value="Deputado Federal">Deputado Federal</option>
-                  <option value="Senador">Senador</option>
-                  <option value="Governador">Governador</option>
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.position_id}
+                    onChange={(e) => setFormData({ ...formData, position_id: e.target.value })}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
+                    required
+                  >
+                    <option value="">Selecione...</option>
+                    {positions.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddPosition}
+                    className="p-2 bg-[#def3cd] text-[#1a3d2a] rounded-lg hover:bg-[#cde4bc] transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Cidade
                 </label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                <select
+                  value={formData.city_id}
+                  onChange={(e) => setFormData({ ...formData, city_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
-                  placeholder="Ex: Curitiba, Londrina..."
                   required
-                />
+                >
+                  <option value="">Selecione...</option>
+                  {cities.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -270,15 +357,15 @@ export default function CadastrarCandidatos() {
                         <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                           <div>
                             <span className="text-gray-500">Partido:</span>
-                            <p className="font-semibold text-[#4a8b3a]">{candidate.party}</p>
+                            <p className="font-semibold text-[#4a8b3a]">{candidate.parties?.name || 'N/A'}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Cargo:</span>
-                            <p className="font-semibold">{candidate.position}</p>
+                            <p className="font-semibold">{candidate.positions?.name || 'N/A'}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Cidade:</span>
-                            <p className="font-semibold">{candidate.city}</p>
+                            <p className="font-semibold">{candidate.cities?.name || 'N/A'}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Número:</span>
