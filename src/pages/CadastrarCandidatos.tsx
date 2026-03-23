@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, Candidate, Party, Position, City } from '../lib/supabase';
+import { supabase, Candidate, Party, Position, State } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Plus, Trash2, Edit, Save, X } from 'lucide-react';
 
@@ -8,14 +8,14 @@ export default function CadastrarCandidatos() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
-  const [cities, setCities] = useState<City[]>([]);
+  const [states, setStates] = useState<State[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     party_id: '',
     position_id: '',
-    city_id: '',
+    state_id: '',
     number: '',
     status: 'Ativo',
   });
@@ -27,6 +27,9 @@ export default function CadastrarCandidatos() {
   const [newPositionName, setNewPositionName] = useState('');
   const [newPositionDesc, setNewPositionDesc] = useState('');
 
+  const [isCityModalOpen, setIsCityModalOpen] = useState(false);
+  const [newStateName, setNewStateName] = useState('');
+
   useEffect(() => {
     loadCandidates();
     loadOptions();
@@ -36,22 +39,22 @@ export default function CadastrarCandidatos() {
     const [
       { data: partiesData },
       { data: positionsData },
-      { data: citiesData }
+      { data: statesData }
     ] = await Promise.all([
       supabase.from('parties').select('*').order('name'),
       supabase.from('positions').select('*').order('name'),
-      supabase.from('cities').select('*').order('name'),
+      supabase.from('states').select('*').order('name'),
     ]);
 
     if (partiesData) setParties(partiesData);
     if (positionsData) setPositions(positionsData);
-    if (citiesData) setCities(citiesData);
+    if (statesData) setStates(statesData);
   };
 
   const loadCandidates = async () => {
     const { data, error } = await supabase
       .from('candidates')
-      .select('*, parties(*), positions(*), cities(*)')
+      .select('*, parties(*), positions(*), states(*)')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -89,7 +92,7 @@ export default function CadastrarCandidatos() {
           name: formData.name,
           party_id: formData.party_id,
           position_id: formData.position_id,
-          city_id: formData.city_id,
+          state_id: formData.state_id,
           number: formData.number,
           status: formData.status,
           created_by: user.id,
@@ -114,7 +117,7 @@ export default function CadastrarCandidatos() {
       name: candidate.name,
       party_id: candidate.party_id,
       position_id: candidate.position_id,
-      city_id: candidate.city_id,
+      state_id: candidate.state_id || '',
       number: candidate.number,
       status: candidate.status,
     });
@@ -174,6 +177,32 @@ export default function CadastrarCandidatos() {
     setLoading(false);
   };
 
+  const handleAddCity = () => {
+    setIsCityModalOpen(true);
+  };
+
+  const submitNewCity = async () => {
+    if (!newStateName) return;
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from('states')
+      .insert([{ name: newStateName }])
+      .select()
+      .single();
+
+    if (error) {
+      alert('Erro ao cadastrar estado');
+      console.error(error);
+    } else {
+      setStates([...states, data as State]);
+      setFormData(prev => ({ ...prev, state_id: data.id }));
+      setIsCityModalOpen(false);
+      setNewStateName('');
+    }
+    setLoading(false);
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este candidato?')) return;
 
@@ -192,7 +221,7 @@ export default function CadastrarCandidatos() {
       name: '',
       party_id: '',
       position_id: '',
-      city_id: '',
+      state_id: '',
       number: '',
       status: 'Ativo',
     });
@@ -281,19 +310,28 @@ export default function CadastrarCandidatos() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cidade
+                  Estado
                 </label>
-                <select
-                  value={formData.city_id}
-                  onChange={(e) => setFormData({ ...formData, city_id: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
-                  required
-                >
-                  <option value="">Selecione...</option>
-                  {cities.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={formData.state_id}
+                    onChange={(e) => setFormData({ ...formData, state_id: e.target.value })}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
+                    required
+                  >
+                    <option value="">Selecione...</option>
+                    {states.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddCity}
+                    className="p-2 bg-[#def3cd] text-[#1a3d2a] rounded-lg hover:bg-[#cde4bc] transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -387,8 +425,8 @@ export default function CadastrarCandidatos() {
                             <p className="font-semibold">{candidate.positions?.name || 'N/A'}</p>
                           </div>
                           <div>
-                            <span className="text-gray-500">Cidade:</span>
-                            <p className="font-semibold">{candidate.cities?.name || 'N/A'}</p>
+                            <span className="text-gray-500">Estado:</span>
+                            <p className="font-semibold">{candidate.states?.name || 'N/A'}</p>
                           </div>
                           <div>
                             <span className="text-gray-500">Número:</span>
@@ -513,6 +551,47 @@ export default function CadastrarCandidatos() {
                 <button
                   onClick={submitNewPosition}
                   disabled={loading || !newPositionName}
+                  className="px-4 py-2 bg-gradient-to-r from-[#4a8b3a] to-[#45b896] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Novo Estado */}
+      {isCityModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-[#1a3d2a]">Novo Estado</h3>
+              <button onClick={() => setIsCityModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Estado</label>
+                <input
+                  type="text"
+                  value={newStateName}
+                  onChange={(e) => setNewStateName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
+                  placeholder="Ex: Paraná"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2 justify-end mt-6">
+                <button
+                  onClick={() => setIsCityModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitNewCity}
+                  disabled={loading || !newStateName}
                   className="px-4 py-2 bg-gradient-to-r from-[#4a8b3a] to-[#45b896] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
                 >
                   {loading ? 'Salvando...' : 'Salvar'}

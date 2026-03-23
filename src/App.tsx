@@ -7,6 +7,8 @@ import CadastrarCandidatos from './pages/CadastrarCandidatos';
 import CadastrarEleitores from './pages/CadastrarEleitores';
 import CadastrarCoordenador from './pages/CadastrarCoordenador';
 import CadastrarMicros from './pages/CadastrarMicros';
+import MetasEleitorais from './pages/MetasEleitorais';
+import ControleMateriais from './pages/ControleMateriais';
 import MockDataPage from './pages/MockDataPage';
 
 function AppContent() {
@@ -37,6 +39,10 @@ function AppContent() {
         return <CadastrarCoordenador />;
       case 'cadastrar-micros':
         return <CadastrarMicros />;
+      case 'metas-eleitorais':
+        return <MetasEleitorais />;
+      case 'materiais-campanha':
+        return <ControleMateriais />;
       default:
         return <MockDataPage pageId={currentPage} />;
     }

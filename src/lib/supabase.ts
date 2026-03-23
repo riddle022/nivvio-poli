@@ -42,6 +42,12 @@ export interface Position {
   created_at: string;
 }
 
+export interface State {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface City {
   id: string;
   name: string;
@@ -55,10 +61,12 @@ export interface Candidate {
   party_id: string;
   position_id: string;
   city_id: string;
+  state_id?: string;
   // Optional relations for select/join
   parties?: Party;
   positions?: Position;
   cities?: City;
+  states?: State;
   number: string;
   photo_url: string;
   status: string;
@@ -83,6 +91,38 @@ export interface Voter {
   created_at: string;
   created_by: string;
   coordinator_id?: string;
+}
+
+export interface CampaignGoal {
+  id: string;
+  candidate_id: string;
+  region_id?: string;
+  state_id?: string;
+  target_votes: number;
+  deadline?: string;
+  created_at: string;
+  created_by?: string;
+  // Relations
+  candidates?: Candidate;
+  regions?: { name: string };
+  states?: { name: string };
+}
+
+export interface MaterialCampanha {
+  id: string;
+  titulo: string;
+  descricao?: string;
+  tipo: 'Pdf' | 'Imagem' | 'Link';
+  url: string;
+  candidato_id?: string;
+  regiao_id?: string;
+  cidade_id?: string;
+  created_at: string;
+  created_by?: string;
+  // Relations
+  candidates?: Candidate;
+  regions?: { name: string };
+  cities?: { name: string };
 }
 
 export interface FieldReport {
