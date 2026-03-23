@@ -117,6 +117,7 @@ export interface MaterialCampanha {
   candidato_id?: string;
   regiao_id?: string;
   cidade_id?: string;
+  shared_with_micros: boolean;
   created_at: string;
   created_by?: string;
   // Relations

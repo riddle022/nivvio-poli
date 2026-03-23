@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Globe, Loader2 } from 'lucide-react';
+import { Plus, Globe, Loader2, Pencil, Trash2, X, Save } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -30,6 +30,7 @@ export default function CadastrarMicros() {
   const [dataLoading, setDataLoading] = useState(true);
   const [allRegions, setAllRegions] = useState<Region[]>([]);
   const [allCities, setAllCities] = useState<City[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -78,19 +79,55 @@ export default function CadastrarMicros() {
             query = query.eq('supervisor_id', profile.id);
         }
 
-        const { data } = await query;
+        const { data } = await query.order('full_name');
         if (data) {
-            setMicros(data.map(m => ({
-                id: m.id,
-                name: m.full_name || '',
-                email: m.username || '',
-                phone: m.phone || '',
-                baseCity: '', // Se podría buscar el nombre si fuera necesario
-                region: '', 
-            })));
+            setMicros(data.map(m => {
+                const regionObj = allRegions.find(r => r.id === m.region_id);
+                const cityObj = allCities.find(c => c.id === m.city_id);
+                return {
+                    id: m.id,
+                    name: m.full_name || '',
+                    email: m.username || '',
+                    phone: m.phone || '',
+                    baseCity: cityObj?.name || '',
+                    region: regionObj?.name || '', 
+                };
+            }));
         }
     } catch (error) {
         console.error('Erro ao carregar micros:', error);
+    }
+  };
+
+  const handleEdit = (m: Micro) => {
+    setEditingId(m.id);
+    setFormData({
+        name: m.name,
+        email: m.email,
+        password: '', // Senha no se muestra
+        phone: m.phone,
+        baseCity: m.baseCity,
+        region: m.region,
+    });
+    // Si la región es fija para el coordinador, se mantiene
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este Micro?')) return;
+    try {
+        setLoading(true);
+        // Intentamos llamar a una función edge para borrar el usuario de Auth si existe
+        // Por ahora, simplemente desactivamos o eliminamos de profiles
+        const { error } = await supabase.from('profiles').delete().eq('id', id);
+        if (error) throw error;
+        
+        alert('Micro excluído com sucesso!');
+        loadMicros();
+    } catch (error: any) {
+        console.error('Erro ao excluir:', error);
+        alert('Erro ao excluir: ' + error.message);
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -106,33 +143,52 @@ export default function CadastrarMicros() {
       const selectedCityObj = allCities.find(c => c.name === formData.baseCity);
       const selectedRegionObj = allRegions.find(r => r.name === formData.region);
 
-      const { data, error } = await supabase.functions.invoke('create-user', {
-        body: {
-          email: formData.email,
-          password: formData.password,
-          full_name: formData.name,
-          role: 'micro', 
-          region_id: selectedRegionObj?.id,
-          city_id: selectedCityObj?.id,
-          supervisor_id: profile?.id, // El supervisor es el actual coordinador
-        }
-      });
+      if (editingId) {
+        // Actualizar perfil existente
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            full_name: formData.name,
+            phone: formData.phone,
+            region_id: selectedRegionObj?.id,
+            city_id: selectedCityObj?.id,
+          })
+          .eq('id', editingId);
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+        if (error) throw error;
+        alert('Micro atualizado com sucesso!');
+      } else {
+        // Crear nuevo usuario vía Edge Function
+        const { data, error } = await supabase.functions.invoke('create-user', {
+          body: {
+            email: formData.email,
+            password: formData.password,
+            full_name: formData.name,
+            phone: formData.phone,
+            role: 'micro', 
+            region_id: selectedRegionObj?.id,
+            city_id: selectedCityObj?.id,
+            supervisor_id: profile?.id, 
+          }
+        });
 
-      alert('Micro cadastrado com sucesso!');
-      loadMicros(); // Recargar lista
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        alert('Micro cadastrado com sucesso!');
+      }
+
+      loadMicros();
       resetForm();
     } catch (error: any) {
-      console.error('Erro ao cadastrar:', error);
-      alert('Erro ao cadastrar micro: ' + error.message);
+      console.error('Erro ao processar:', error);
+      alert('Erro: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   const resetForm = () => {
+    setEditingId(null);
     setFormData({
       name: '',
       email: '',
@@ -162,7 +218,9 @@ export default function CadastrarMicros() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-6">
-            <h2 className="text-xl font-bold text-[#1a3d2a] mb-6">Novo Micro</h2>
+            <h2 className="text-xl font-bold text-[#1a3d2a] mb-6">
+                {editingId ? 'Editar Micro' : 'Novo Micro'}
+            </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -183,21 +241,24 @@ export default function CadastrarMicros() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
+                    disabled={!!editingId} // No permitimos cambiar email aquí por seguridad (sería otra lógica)
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none disabled:bg-gray-50"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
-                    required
-                    placeholder="******"
-                  />
-                </div>
+                {!editingId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Senha</label>
+                    <input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
+                      required
+                      placeholder="******"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Telefone</label>
                   <input
@@ -237,15 +298,24 @@ export default function CadastrarMicros() {
                 </select>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 flex gap-2">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-gradient-to-r from-[#1a3d2a] to-[#4a8b3a] text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:shadow-lg transform transition-all"
+                  className="flex-1 bg-gradient-to-r from-[#1a3d2a] to-[#4a8b3a] text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:shadow-lg transform transition-all"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : <Plus size={18} />}
-                  Cadastrar Micro
+                  {loading ? <Loader2 className="animate-spin" size={18} /> : (editingId ? <Save size={18} /> : <Plus size={18} />)}
+                  {editingId ? 'Atualizar' : 'Cadastrar'}
                 </button>
+                {editingId && (
+                    <button
+                        type="button"
+                        onClick={resetForm}
+                        className="p-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+                    >
+                        <X size={20} />
+                    </button>
+                )}
               </div>
             </form>
           </div>
@@ -259,7 +329,7 @@ export default function CadastrarMicros() {
                 </h2>
                 <div className="grid grid-cols-1 gap-4">
                     {micros.map(m => (
-                        <div key={m.id} className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 flex items-center justify-between">
+                        <div key={m.id} className="p-4 border border-gray-100 rounded-xl hover:bg-gray-50 flex items-center justify-between group">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 bg-[#def3cd] rounded-full flex items-center justify-center font-bold text-[#1a3d2a]">
                                     {m.name.charAt(0).toUpperCase()}
@@ -267,12 +337,31 @@ export default function CadastrarMicros() {
                                 <div>
                                     <h3 className="font-bold text-[#1a3d2a]">{m.name}</h3>
                                     <p className="text-sm text-gray-500">{m.email}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">
+                                        {m.region} • {m.baseCity}
+                                    </p>
                                 </div>
                             </div>
-                            <div className="flex gap-2">
-                                <span className="bg-[#f0f9eb] text-[#1a3d2a] px-3 py-1 rounded-full text-xs font-semibold">
+                            <div className="flex items-center gap-4">
+                                <span className="hidden md:inline bg-[#f0f9eb] text-[#1a3d2a] px-3 py-1 rounded-full text-xs font-semibold">
                                     {m.phone}
                                 </span>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={() => handleEdit(m)}
+                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                        title="Editar"
+                                    >
+                                        <Pencil size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDelete(m.id)}
+                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title="Excluir"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}

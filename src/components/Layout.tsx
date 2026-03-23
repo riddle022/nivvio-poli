@@ -9,15 +9,11 @@ import {
   Users, 
   Target, 
   Package, 
-  Send, 
   BarChart3, 
   Map as MapIcon, 
   FileText, 
   Calendar, 
-  Truck, 
-  MapPin, 
-  Camera, 
-  CheckCircle2 
+  Truck 
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -45,15 +41,14 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
         { id: 'cadastrar-coordenador', label: 'Cadastrar Coordenador', icon: Users },
         { id: 'metas-eleitorais', label: 'Metas Eleitorais', icon: Target },
         { id: 'materiais-campanha', label: 'Materiais de Campanha', icon: Package },
-        { id: 'cards-motivacionais', label: 'Cards Motivacionais', icon: Send },
         { id: 'metricas-campanha', label: 'Métricas da Campanha', icon: BarChart3 },
         { id: 'mapa-estadual', label: 'Mapa Estadual', icon: MapIcon },
-        { id: 'relatorios-coordenadores', label: 'Relatórios Coordenadores', icon: FileText },
-        { id: 'desempenho-micros', label: 'Desempenho dos Micros', icon: Target }
+        { id: 'relatorios-coordenadores', label: 'Relatórios Coordenadores', icon: FileText }
       );
     } else if (role === 'coordinator') {
       items.push(
         { id: 'cadastrar-micros', label: 'Cadastrar Micros', icon: Users },
+        { id: 'materiais-campanha', label: 'Materiais de Campanha', icon: Package },
         { id: 'organizar-reunioes', label: 'Organizar Reuniões', icon: Calendar },
         { id: 'distribuir-materiais', label: 'Distribuir Materiais', icon: Truck },
         { id: 'relatorios-visitas', label: 'Relatórios de Visitas', icon: FileText },
@@ -63,9 +58,8 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     } else if (role === 'micro') {
       items.push(
         { id: 'cadastro-eleitores', label: 'Cadastro de Eleitores', icon: UserPlus },
-        { id: 'envio-fotos', label: 'Envio de Fotos', icon: Camera },
-        { id: 'relatorio-visitas-micro', label: 'Relatório de Visitas', icon: FileText },
-        { id: 'avaliacao-fidelidade', label: 'Avaliação de Fidelidade', icon: CheckCircle2 }
+        { id: 'materiais-campanha', label: 'Materiais de Campanha', icon: Package },
+        { id: 'relatorio-visitas-micro', label: 'Relatório de Visitas', icon: FileText }
       );
     }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, MaterialCampanha, Candidate } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   FileText, 
   Image as ImageIcon, 
@@ -13,11 +14,15 @@ import {
   Upload,
   MapPin,
   Building2,
-  User,
-  Pencil
+  Pencil,
+  Package,
+  Share2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function ControleMateriais() {
+  const { profile } = useAuth();
   const [materiais, setMateriais] = useState<MaterialCampanha[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [regions, setRegions] = useState<{ id: string, name: string }[]>([]);
@@ -27,6 +32,11 @@ export default function ControleMateriais() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const isAdmin = profile?.role === 'admin';
+  const isCoordinator = profile?.role === 'coordinator';
+  const isMicro = profile?.role === 'micro';
+  const isRestricted = isCoordinator || isMicro;
 
   // Filtros
   const [filterCandidateId, setFilterCandidateId] = useState('');
@@ -47,7 +57,7 @@ export default function ControleMateriais() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [profile]);
 
   async function fetchData() {
     try {
@@ -68,6 +78,10 @@ export default function ControleMateriais() {
       setCandidates(candData || []);
       setRegions(regData || []);
       setCities(cityData || []);
+
+      if (isRestricted && profile?.region_id) {
+          setFilterRegionId(profile.region_id);
+      }
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
     } finally {
@@ -75,7 +89,23 @@ export default function ControleMateriais() {
     }
   }
 
+  const handleToggleShare = async (id: string, currentStatus: boolean) => {
+    try {
+        const { error } = await supabase
+            .from('materiais')
+            .update({ shared_with_micros: !currentStatus })
+            .eq('id', id);
+        
+        if (error) throw error;
+        fetchData(); // Recarregar para ver a mudança
+    } catch (error) {
+        console.error('Erro ao alternar compartilhamento:', error);
+        alert('Erro ao atualizar status de compartilhamiento.');
+    }
+  };
+
   const handleEdit = (m: MaterialCampanha) => {
+    if (!isAdmin) return;
     setEditingId(m.id);
     setFormData({
       titulo: m.titulo,
@@ -111,6 +141,7 @@ export default function ControleMateriais() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return;
     try {
       setUploading(true);
       let finalUrl = formData.url;
@@ -168,6 +199,7 @@ export default function ControleMateriais() {
   };
 
   const handleDelete = async (id: string, url: string, tipo: string) => {
+    if (!isAdmin) return;
     if (!confirm('Tem certeza que deseja excluir este material?')) return;
 
     try {
@@ -191,6 +223,17 @@ export default function ControleMateriais() {
   const filteredMateriais = materiais.filter(m => {
     const matchesSearch = m.titulo.toLowerCase().includes(searchTerm.toLowerCase()) || m.descricao?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCandidate = !filterCandidateId || m.candidato_id === filterCandidateId;
+    
+    // Regla para coordinadores/micros: Solo ven materiales globales o de su región
+    if (isRestricted && profile?.region_id) {
+        if (m.regiao_id && m.regiao_id !== profile.region_id) return false;
+    }
+
+    // Regla para Micros: Solo ven lo compartido por sus coordinadores
+    if (isMicro) {
+        if (!m.shared_with_micros) return false;
+    }
+
     const matchesRegion = !filterRegionId || m.regiao_id === filterRegionId;
     const matchesCity = !filterCityId || m.cidade_id === filterCityId;
     const matchesType = !filterType || m.tipo === filterType;
@@ -211,19 +254,24 @@ export default function ControleMateriais() {
     <div className="p-6 pb-20">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-[#1a3d2a]">Controle de Materiais</h1>
-          <p className="text-gray-600">Gestão de arquivos e links da campanha</p>
+          <h1 className="text-3xl font-bold text-[#1a3d2a] flex items-center gap-3">
+              <Package size={32} className="text-[#45b896]" />
+              Materiais de Campanha
+          </h1>
+          <p className="text-gray-600">Confira os archivos e links oficiais da campanha</p>
         </div>
-        <button 
-          onClick={() => {
-            setEditingId(null);
-            setFormData({ titulo: '', descricao: '', tipo: 'Pdf', url: '', file: null, candidato_id: '', regiao_id: '', cidade_id: '' });
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 bg-[#1a3d2a] text-white px-6 py-3 rounded-xl hover:bg-[#2d5940] transition-all font-bold shadow-lg"
-        >
-          <Plus size={20} /> Novo Material
-        </button>
+        {isAdmin && (
+            <button 
+                onClick={() => {
+                    setEditingId(null);
+                    setFormData({ titulo: '', descricao: '', tipo: 'Pdf', url: '', file: null, candidato_id: '', regiao_id: '', cidade_id: '' });
+                    setIsModalOpen(true);
+                }}
+                className="flex items-center gap-2 bg-[#1a3d2a] text-white px-6 py-3 rounded-xl hover:bg-[#2d5940] transition-all font-bold shadow-lg"
+            >
+                <Plus size={20} /> Novo Material
+            </button>
+        )}
       </div>
 
       {/* Barra de Filtros */}
@@ -236,7 +284,7 @@ export default function ControleMateriais() {
               placeholder="Buscar material..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-[#45b896] outline-none text-sm"
+              className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-[#45b896] outline-none text-sm font-medium"
             />
           </div>
           
@@ -251,11 +299,12 @@ export default function ControleMateriais() {
 
           <select 
             value={filterRegionId}
+            disabled={isRestricted}
             onChange={(e) => {
               setFilterRegionId(e.target.value);
               setFilterCityId('');
             }}
-            className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-[#45b896] outline-none text-sm font-semibold"
+            className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-[#45b896] outline-none text-sm font-semibold disabled:bg-gray-100"
           >
             <option value="">Todas as Regiões</option>
             {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -299,8 +348,9 @@ export default function ControleMateriais() {
                   <th className="px-6 py-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tipo</th>
                   <th className="px-6 py-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Candidato</th>
                   <th className="px-6 py-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Localização</th>
+                  {isAdmin && <th className="px-6 py-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Status Compartilh.</th>}
                   <th className="px-6 py-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Data</th>
-                  <th className="px-6 py-4 text-right text-[11px] font-bold text-gray-400 uppercase tracking-wider">Ações</th>
+                  <th className={`px-6 py-4 text-right text-[11px] font-bold text-gray-400 uppercase tracking-wider ${!isAdmin && !isCoordinator ? 'w-24' : ''}`}>Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -341,6 +391,15 @@ export default function ControleMateriais() {
                         </div>
                       </div>
                     </td>
+                    {isAdmin && (
+                        <td className="px-6 py-4">
+                            <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                                m.shared_with_micros ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'
+                            }`}>
+                                {m.shared_with_micros ? 'Compartilhado' : 'Privado Coordenador'}
+                            </span>
+                        </td>
+                    )}
                     <td className="px-6 py-4">
                       <p className="text-[11px] text-gray-400 font-medium">
                         {new Date(m.created_at).toLocaleDateString()}
@@ -353,31 +412,49 @@ export default function ControleMateriais() {
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="p-2 text-gray-400 hover:text-[#45b896] hover:bg-green-50 rounded-lg transition-all"
+                          title="Abrir Material"
                         >
                           <ExternalLink size={18} />
                         </a>
-                        <button 
-                          onClick={() => handleEdit(m)}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                          title="Editar"
-                        >
-                          <Pencil size={18} />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(m.id, m.url, m.tipo)}
-                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                          title="Excluir"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {isCoordinator && (
+                            <button 
+                                onClick={() => handleToggleShare(m.id, m.shared_with_micros)}
+                                className={`p-2 rounded-lg transition-all ${
+                                    m.shared_with_micros 
+                                        ? 'text-green-600 bg-green-50 hover:bg-green-100' 
+                                        : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                                }`}
+                                title={m.shared_with_micros ? "Remover dos Micros" : "Compartilhar com Micros"}
+                            >
+                                {m.shared_with_micros ? <Eye size={18} /> : <EyeOff size={18} />}
+                            </button>
+                        )}
+                        {isAdmin && (
+                            <>
+                                <button 
+                                    onClick={() => handleEdit(m)}
+                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                    title="Editar"
+                                >
+                                    <Pencil size={18} />
+                                </button>
+                                <button 
+                                    onClick={() => handleDelete(m.id, m.url, m.tipo)}
+                                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                    title="Excluir"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            </>
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))}
                 {filteredMateriais.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic">
-                      Nenhum material encontrado para os filtros selecionados.
+                    <td colSpan={isAdmin ? 7 : 6} className="px-6 py-12 text-center text-gray-400 italic font-medium">
+                      Nenhum material encontrado para sua região ou filtros selecionados.
                     </td>
                   </tr>
                 )}
@@ -387,8 +464,8 @@ export default function ControleMateriais() {
         </div>
       )}
 
-      {/* Modal */}
-      {isModalOpen && (
+      {/* Modal - Só acessível por Admin */}
+      {isModalOpen && isAdmin && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-xl animate-in fade-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">

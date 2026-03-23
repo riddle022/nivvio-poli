@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Voter } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Trash2, Edit, Save, X, Star } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, X, Star, Loader2, MapPin, Navigation } from 'lucide-react';
 
 const getFidelityLabel = (score: number) => {
   switch(score) {
@@ -16,25 +16,77 @@ const getFidelityLabel = (score: number) => {
 
 
 export default function CadastrarEleitores() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [voters, setVoters] = useState<Voter[]>([]);
+  const [cities, setCities] = useState<{ id: string, name: string, region_id: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     city: '',
-    neighborhood: '',
     fidelity_score: 3,
-    observations: ''
+    observations: '',
+    latitude: null as number | null,
+    longitude: null as number | null
   });
 
   useEffect(() => {
-    loadVoters();
-  }, []);
+    const init = async () => {
+        setDataLoading(true);
+        await Promise.all([
+            loadVoters(),
+            loadCities()
+        ]);
+        setDataLoading(false);
+    };
+    init();
+  }, [user, profile]);
+
+  const getLocation = () => {
+    return new Promise<{ lat: number, lng: number }>((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('GPS não suportado pelo navegador'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          reject(error);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    });
+  };
+
+  const loadCities = async () => {
+      if (!profile) return;
+      const { data, error } = await supabase
+        .from('cities')
+        .select('*')
+        .order('name');
+      
+      if (error) {
+          console.error('Erro ao carregar cidades:', error);
+      } else if (data) {
+          // Filtrar por la región del micro
+          const filtered = profile.region_id 
+            ? data.filter(c => c.region_id === profile.region_id)
+            : data;
+          setCities(filtered);
+      }
+  };
 
   const loadVoters = async () => {
+    if (!user) return;
     const { data, error } = await supabase
       .from('voters')
       .select('*')
@@ -52,10 +104,38 @@ export default function CadastrarEleitores() {
     if (!user) return;
     setLoading(true);
 
+    let lat = formData.latitude;
+    let lng = formData.longitude;
+
+    // Se for um novo cadastro, tenta pegar o GPS na hora se ainda não tiver
+    if (!editingId && (!lat || !lng)) {
+      try {
+        const pos = await getLocation();
+        lat = pos.lat;
+        lng = pos.lng;
+      } catch (err) {
+        console.error('Erro ao obter GPS:', err);
+        if (!confirm('Não foi possível obter sua localização GPS. Deseja continuar o cadastro sem a localização? (Recomendado para o mapa administrativo)')) {
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
+    const submissionData = {
+        name: formData.name,
+        phone: formData.phone,
+        city: formData.city,
+        fidelity_score: formData.fidelity_score,
+        observations: formData.observations,
+        latitude: lat,
+        longitude: lng
+    };
+
     if (editingId) {
       const { error } = await supabase
         .from('voters')
-        .update(formData)
+        .update(submissionData)
         .eq('id', editingId);
 
       if (error) {
@@ -68,8 +148,9 @@ export default function CadastrarEleitores() {
     } else {
       const { error } = await supabase.from('voters').insert([
         {
-          ...formData,
+          ...submissionData,
           created_by: user.id,
+          coordinator_id: profile?.supervisor_id || null, // Salva o coordenador responsável
         },
       ]);
 
@@ -89,9 +170,10 @@ export default function CadastrarEleitores() {
       name: voter.name || '',
       phone: voter.phone || '',
       city: voter.city || '',
-      neighborhood: voter.neighborhood || '',
       fidelity_score: voter.fidelity_score || 3,
-      observations: voter.observations || ''
+      observations: voter.observations || '',
+      latitude: voter.latitude || null,
+      longitude: voter.longitude || null
     });
   };
 
@@ -106,12 +188,22 @@ export default function CadastrarEleitores() {
       name: '',
       phone: '',
       city: '',
-      neighborhood: '',
       fidelity_score: 3,
-      observations: ''
+      observations: '',
+      latitude: null,
+      longitude: null
     });
     setEditingId(null);
   };
+
+  if (dataLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <Loader2 className="w-12 h-12 text-[#45b896] animate-spin mb-4" />
+        <p className="text-gray-600 font-medium">Carregando dados...</p>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -153,24 +245,22 @@ export default function CadastrarEleitores() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
-                <input
-                  type="text"
+                <select
                   value={formData.city}
                   onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
-                  placeholder="Ex: Curitiba"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Bairro</label>
-                <input
-                  type="text"
-                  value={formData.neighborhood}
-                  onChange={(e) => setFormData({ ...formData, neighborhood: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
-                  placeholder="Ex: Centro"
-                />
+                  required
+                >
+                  <option value="">Selecione a cidade...</option>
+                  {cities.map(city => (
+                    <option key={city.id} value={city.name}>{city.name}</option>
+                  ))}
+                </select>
+                {cities.length === 0 && (
+                    <p className="text-[10px] text-red-500 font-bold mt-1">
+                        Nenhuma cidade encontrada para sua região registrada.
+                    </p>
+                )}
               </div>
 
               <div>
@@ -203,6 +293,40 @@ export default function CadastrarEleitores() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Localização GPS</label>
+                <div className={`flex items-center gap-3 p-3 rounded-xl border ${formData.latitude ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className={`p-2 rounded-lg ${formData.latitude ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                    <MapPin size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-xs font-bold ${formData.latitude ? 'text-green-700' : 'text-gray-500'}`}>
+                      {formData.latitude ? 'Localização Capturada' : 'Localização não capturada'}
+                    </p>
+                    {formData.latitude && (
+                      <p className="text-[10px] text-green-600 font-medium">
+                        {formData.latitude.toFixed(4)}, {formData.longitude?.toFixed(4)}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const pos = await getLocation();
+                        setFormData({ ...formData, latitude: pos.lat, longitude: pos.lng });
+                      } catch (err) {
+                        alert('Por favor, ative o GPS e dê permissão para capturar a localização.');
+                      }
+                    }}
+                    className="p-2 text-[#45b896] hover:bg-white rounded-lg transition-all"
+                    title="Obter Localização Agora"
+                  >
+                    <Navigation size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
                 <textarea
                   value={formData.observations}
@@ -219,7 +343,7 @@ export default function CadastrarEleitores() {
                   disabled={loading}
                   className="flex-1 bg-gradient-to-r from-[#4a8b3a] to-[#45b896] text-white py-3 rounded-lg font-semibold hover:shadow-lg flex items-center justify-center gap-2 transition-all"
                 >
-                  {editingId ? <Save size={18} /> : <Plus size={18} />}
+                  {loading ? <Loader2 className="animate-spin" size={18} /> : (editingId ? <Save size={18} /> : <Plus size={18} />)}
                   {loading ? 'Salvando...' : (editingId ? 'Atualizar' : 'Cadastrar')}
                 </button>
                 {editingId && (
@@ -244,10 +368,10 @@ export default function CadastrarEleitores() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="font-bold text-lg text-[#1a3d2a]">{voter.name}</h3>
-                        <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                           <div><span className="text-gray-500 block">Telefone:</span><p className="font-semibold">{voter.phone || '-'}</p></div>
                           <div><span className="text-gray-500 block">Cidade:</span><p className="font-semibold">{voter.city || '-'}</p></div>
-                          <div className="col-span-2">
+                          <div className="">
                             <span className="text-gray-500 block mb-1">Fidelidade:</span>
                             <div className="flex flex-col gap-1">
                               <div className="flex">
