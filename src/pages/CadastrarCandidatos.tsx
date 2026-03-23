@@ -19,6 +19,13 @@ export default function CadastrarCandidatos() {
     number: '',
     status: 'Ativo',
   });
+  const [isPartyModalOpen, setIsPartyModalOpen] = useState(false);
+  const [newPartyName, setNewPartyName] = useState('');
+  const [newPartyDesc, setNewPartyDesc] = useState('');
+
+  const [isPositionModalOpen, setIsPositionModalOpen] = useState(false);
+  const [newPositionName, setNewPositionName] = useState('');
+  const [newPositionDesc, setNewPositionDesc] = useState('');
 
   useEffect(() => {
     loadCandidates();
@@ -113,13 +120,17 @@ export default function CadastrarCandidatos() {
     });
   };
 
-  const handleAddParty = async () => {
-    const name = prompt('Nome do novo partido:');
-    if (!name) return;
+  const handleAddParty = () => {
+    setIsPartyModalOpen(true);
+  };
+
+  const submitNewParty = async () => {
+    if (!newPartyName) return;
+    setLoading(true);
 
     const { data, error } = await supabase
       .from('parties')
-      .insert([{ name }])
+      .insert([{ name: newPartyName, description: newPartyDesc }])
       .select()
       .single();
 
@@ -129,16 +140,24 @@ export default function CadastrarCandidatos() {
     } else {
       setParties([...parties, data as Party]);
       setFormData(prev => ({ ...prev, party_id: data.id }));
+      setIsPartyModalOpen(false);
+      setNewPartyName('');
+      setNewPartyDesc('');
     }
+    setLoading(false);
   };
 
-  const handleAddPosition = async () => {
-    const name = prompt('Nome do novo cargo:');
-    if (!name) return;
+  const handleAddPosition = () => {
+    setIsPositionModalOpen(true);
+  };
+
+  const submitNewPosition = async () => {
+    if (!newPositionName) return;
+    setLoading(true);
 
     const { data, error } = await supabase
       .from('positions')
-      .insert([{ name }])
+      .insert([{ name: newPositionName, description: newPositionDesc }])
       .select()
       .single();
 
@@ -148,7 +167,11 @@ export default function CadastrarCandidatos() {
     } else {
       setPositions([...positions, data as Position]);
       setFormData(prev => ({ ...prev, position_id: data.id }));
+      setIsPositionModalOpen(false);
+      setNewPositionName('');
+      setNewPositionDesc('');
     }
+    setLoading(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -397,6 +420,108 @@ export default function CadastrarCandidatos() {
           </div>
         </div>
       </div>
+
+      {/* Modal Novo Partido */}
+      {isPartyModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-[#1a3d2a]">Novo Partido</h3>
+              <button onClick={() => setIsPartyModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Partido</label>
+                <input
+                  type="text"
+                  value={newPartyName}
+                  onChange={(e) => setNewPartyName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
+                  placeholder="Ex: Partido X"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <textarea
+                  value={newPartyDesc}
+                  onChange={(e) => setNewPartyDesc(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none min-h-[100px]"
+                  placeholder="Descrição do partido (opcional)"
+                />
+              </div>
+              <div className="flex gap-2 justify-end mt-6">
+                <button
+                  onClick={() => setIsPartyModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitNewParty}
+                  disabled={loading || !newPartyName}
+                  className="px-4 py-2 bg-gradient-to-r from-[#4a8b3a] to-[#45b896] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Novo Cargo */}
+      {isPositionModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-[#1a3d2a]">Novo Cargo</h3>
+              <button onClick={() => setIsPositionModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Cargo</label>
+                <input
+                  type="text"
+                  value={newPositionName}
+                  onChange={(e) => setNewPositionName(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none"
+                  placeholder="Ex: Deputado Estadual"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <textarea
+                  value={newPositionDesc}
+                  onChange={(e) => setNewPositionDesc(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] focus:border-transparent outline-none min-h-[100px]"
+                  placeholder="Descrição do cargo (opcional)"
+                />
+              </div>
+              <div className="flex gap-2 justify-end mt-6">
+                <button
+                  onClick={() => setIsPositionModalOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submitNewPosition}
+                  disabled={loading || !newPositionName}
+                  className="px-4 py-2 bg-gradient-to-r from-[#4a8b3a] to-[#45b896] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

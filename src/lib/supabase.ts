@@ -31,12 +31,14 @@ export interface Profile {
 export interface Party {
   id: string;
   name: string;
+  description?: string;
   created_at: string;
 }
 
 export interface Position {
   id: string;
   name: string;
+  description?: string;
   created_at: string;
 }
 

@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import CadastrarCandidatos from './pages/CadastrarCandidatos';
+import CadastrarEleitores from './pages/CadastrarEleitores';
 import CadastrarCoordenador from './pages/CadastrarCoordenador';
 import CadastrarMicros from './pages/CadastrarMicros';
 import MockDataPage from './pages/MockDataPage';
@@ -29,8 +30,9 @@ function AppContent() {
       case 'dashboard':
         return <Dashboard />;
       case 'cadastrar-candidatos':
-      case 'cadastro-eleitores':
         return <CadastrarCandidatos />;
+      case 'cadastro-eleitores':
+        return <CadastrarEleitores />;
       case 'cadastrar-coordenador':
         return <CadastrarCoordenador />;
       case 'cadastrar-micros':
