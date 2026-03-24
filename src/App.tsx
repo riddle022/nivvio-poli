@@ -10,6 +10,7 @@ import CadastrarMicros from './pages/CadastrarMicros';
 import MetasEleitorais from './pages/MetasEleitorais';
 import ControleMateriais from './pages/ControleMateriais';
 import MapaEstadual from './pages/MapaEstadual';
+import MetricasCampanha from './pages/MetricasCampanha';
 import MockDataPage from './pages/MockDataPage';
 
 function AppContent() {
@@ -46,6 +47,8 @@ function AppContent() {
         return <ControleMateriais />;
       case 'mapa-estadual':
         return <MapaEstadual />;
+      case 'metricas-campanha':
+        return <MetricasCampanha />;
       default:
         return <MockDataPage pageId={currentPage} />;
     }
