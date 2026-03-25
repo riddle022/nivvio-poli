@@ -157,7 +157,8 @@ export default function CadastrarEleitores() {
         {
           ...submissionData,
           created_by: user.id,
-          coordinator_id: profile?.supervisor_id || null, // Salva o coordenador responsável
+          // Si es coordinador, se asigna a sí mismo. Si es micro, asigna a su supervisor.
+          coordinator_id: profile?.role === 'coordinator' ? user.id : (profile?.supervisor_id || null), 
         },
       ]);
 

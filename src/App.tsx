@@ -14,6 +14,7 @@ import MetricasCampanha from './pages/MetricasCampanha';
 import MetasRegionais from './pages/MetasRegionais';
 import OrganizarReunioes from './pages/OrganizarReunioes';
 import RelatoriosVisitas from './pages/RelatoriosVisitas';
+import RelatoriosCoordenadores from './pages/RelatoriosCoordenadores';
 import MapaRegional from './pages/MapaRegional';
 import MockDataPage from './pages/MockDataPage';
 
@@ -59,6 +60,8 @@ function AppContent() {
         return <OrganizarReunioes />;
       case 'relatorios-visitas':
         return <RelatoriosVisitas />;
+      case 'relatorios-coordenadores':
+        return <RelatoriosCoordenadores />;
       case 'mapa-regional':
         return <MapaRegional />;
       default:
