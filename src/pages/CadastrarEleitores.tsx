@@ -26,7 +26,8 @@ export default function CadastrarEleitores() {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    city: '',
+    city: '', // Guardará el texto de la ciudad (legacy)
+    city_id: '', // Guardará el ID de la ciudad
     fidelity_score: 3,
     observations: '',
     latitude: null as number | null,
@@ -122,15 +123,21 @@ export default function CadastrarEleitores() {
       }
     }
 
+    const selectedCity = cities.find(c => c.id === formData.city_id);
+
     const submissionData = {
         name: formData.name,
         phone: formData.phone,
-        city: formData.city,
+        city: selectedCity ? selectedCity.name : formData.city, // Mantém compatibilidade texto
+        city_id: formData.city_id ? formData.city_id : null,
+        region_id: selectedCity ? selectedCity.region_id : null,
         fidelity_score: formData.fidelity_score,
         observations: formData.observations,
         latitude: lat,
         longitude: lng
     };
+
+    console.log("🚀 Payload a enviar para Supabase:", submissionData);
 
     if (editingId) {
       const { error } = await supabase
@@ -170,6 +177,7 @@ export default function CadastrarEleitores() {
       name: voter.name || '',
       phone: voter.phone || '',
       city: voter.city || '',
+      city_id: voter.city_id || '',
       fidelity_score: voter.fidelity_score || 3,
       observations: voter.observations || '',
       latitude: voter.latitude || null,
@@ -188,6 +196,7 @@ export default function CadastrarEleitores() {
       name: '',
       phone: '',
       city: '',
+      city_id: '',
       fidelity_score: 3,
       observations: '',
       latitude: null,
@@ -246,14 +255,14 @@ export default function CadastrarEleitores() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
                 <select
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                  value={formData.city_id}
+                  onChange={(e) => setFormData({ ...formData, city_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
                   required
                 >
                   <option value="">Selecione a cidade...</option>
                   {cities.map(city => (
-                    <option key={city.id} value={city.name}>{city.name}</option>
+                    <option key={city.id} value={city.id}>{city.name}</option>
                   ))}
                 </select>
                 {cities.length === 0 && (

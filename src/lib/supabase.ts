@@ -19,6 +19,7 @@ export interface Profile {
   phone?: string;
   region_id?: string;
   city_id?: string;
+  region?: string;
   region_name?: string;
   supervisor_id?: string;
   active: boolean;
@@ -81,6 +82,8 @@ export interface Voter {
   phone?: string;
   address?: string;
   city?: string;
+  city_id?: string;
+  region_id?: string;
   neighborhood?: string;
   fidelity_score: number;
   last_visit_at: string;
@@ -97,6 +100,7 @@ export interface CampaignGoal {
   id: string;
   candidate_id: string;
   region_id?: string;
+  city_id?: string;
   state_id?: string;
   target_votes: number;
   deadline?: string;
@@ -105,6 +109,7 @@ export interface CampaignGoal {
   // Relations
   candidates?: Candidate;
   regions?: { name: string };
+  cities?: { name: string };
   states?: { name: string };
 }
 

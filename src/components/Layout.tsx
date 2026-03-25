@@ -12,8 +12,7 @@ import {
   BarChart3, 
   Map as MapIcon, 
   FileText, 
-  Calendar, 
-  Truck 
+  Calendar
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -50,7 +49,6 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
         { id: 'cadastrar-micros', label: 'Cadastrar Micros', icon: Users },
         { id: 'materiais-campanha', label: 'Materiais de Campanha', icon: Package },
         { id: 'organizar-reunioes', label: 'Organizar Reuniões', icon: Calendar },
-        { id: 'distribuir-materiais', label: 'Distribuir Materiais', icon: Truck },
         { id: 'relatorios-visitas', label: 'Relatórios de Visitas', icon: FileText },
         { id: 'metas-regionais', label: 'Metas Regionais', icon: Target },
         { id: 'mapa-regional', label: 'Mapa da Região', icon: MapIcon }

@@ -11,6 +11,10 @@ import MetasEleitorais from './pages/MetasEleitorais';
 import ControleMateriais from './pages/ControleMateriais';
 import MapaEstadual from './pages/MapaEstadual';
 import MetricasCampanha from './pages/MetricasCampanha';
+import MetasRegionais from './pages/MetasRegionais';
+import OrganizarReunioes from './pages/OrganizarReunioes';
+import RelatoriosVisitas from './pages/RelatoriosVisitas';
+import MapaRegional from './pages/MapaRegional';
 import MockDataPage from './pages/MockDataPage';
 
 function AppContent() {
@@ -49,6 +53,14 @@ function AppContent() {
         return <MapaEstadual />;
       case 'metricas-campanha':
         return <MetricasCampanha />;
+      case 'metas-regionais':
+        return <MetasRegionais />;
+      case 'organizar-reunioes':
+        return <OrganizarReunioes />;
+      case 'relatorios-visitas':
+        return <RelatoriosVisitas />;
+      case 'mapa-regional':
+        return <MapaRegional />;
       default:
         return <MockDataPage pageId={currentPage} />;
     }
