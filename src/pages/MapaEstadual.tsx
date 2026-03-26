@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { supabase, Voter, Candidate } from '../lib/supabase';
+import { supabase, Voter } from '../lib/supabase';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { 
   Users, 
   MapPin, 
-  Search, 
   Loader2, 
   Filter, 
   Layout, 
@@ -103,17 +102,14 @@ function CustomZoomControl({ center, zoom }: { center: [number, number], zoom: n
 
 export default function MapaEstadual() {
   const [voters, setVoters] = useState<Voter[]>([]);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [regions, setRegions] = useState<{ id: string, name: string }[]>([]);
   const [cities, setCities] = useState<{ id: string, name: string, region_id: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filtros
-  const [filterCandidateId, setFilterCandidateId] = useState('');
   const [filterRegionId, setFilterRegionId] = useState('');
   const [filterCityId, setFilterCityId] = useState('');
   const [filterFidelity, setFilterFidelity] = useState<number | ''>('');
-  const [searchTerm, setSearchTerm] = useState('');
 
   // Centro inicial: Paraná
   const mapCenter: [number, number] = [-24.8918, -51.5540];
@@ -128,21 +124,15 @@ export default function MapaEstadual() {
       setLoading(true);
       const [
         { data: vData },
-        { data: candData },
         { data: regData },
         { data: cityData }
       ] = await Promise.all([
         supabase.from('voters').select('*'),
-        supabase.from('candidates').select('*'),
         supabase.from('regions').select('*'),
         supabase.from('cities').select('*')
       ]);
 
       setVoters(vData || []);
-      if (vData && vData.length > 0) {
-        console.log('DEBUG - Primeiro Eleitor:', vData[0]);
-      }
-      setCandidates(candData || []);
       setRegions(regData || []);
       setCities(cityData || []);
     } catch (error) {
@@ -158,13 +148,11 @@ export default function MapaEstadual() {
 
     if (!lat || !lng) return false;
 
-    const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCandidate = !filterCandidateId || true; 
-    const matchesRegion = !filterRegionId || true;
+    const matchesRegion = !filterRegionId || v.region_id === filterRegionId;
     const matchesCity = !filterCityId || v.city === cities.find(c => c.id === filterCityId)?.name;
     const matchesFidelity = filterFidelity === '' || v.fidelity_score === filterFidelity;
 
-    return matchesSearch && matchesCandidate && matchesRegion && matchesCity && matchesFidelity;
+    return matchesRegion && matchesCity && matchesFidelity;
   });
 
   return (
@@ -180,9 +168,6 @@ export default function MapaEstadual() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-            <div className="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] font-bold">
-                DEBUG: Registros: {voters.length} | Com Lat: {voters.filter(v => v.latitude).length} | Com Lon: {voters.filter(v => v.longitude).length}
-            </div>
             <div className="bg-[#def3cd] text-[#1a3d2a] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
                 <Users size={14} />
                 {filteredVoters.length} Eleitores Mapeados
@@ -206,32 +191,6 @@ export default function MapaEstadual() {
             </h3>
 
             <div className="space-y-4">
-               <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Buscar Nome</label>
-                  <div className="relative mt-1">
-                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                     <input 
-                        type="text" 
-                        placeholder="Nome do eleitor..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#45b896] outline-none"
-                     />
-                  </div>
-               </div>
-
-               <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Candidato</label>
-                  <select 
-                    value={filterCandidateId}
-                    onChange={(e) => setFilterCandidateId(e.target.value)}
-                    className="w-full mt-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#45b896] outline-none"
-                  >
-                    <option value="">Todos os Candidatos</option>
-                    {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-               </div>
-
                <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1">Região</label>
                   <select 
@@ -285,8 +244,6 @@ export default function MapaEstadual() {
                     setFilterRegionId('');
                     setFilterCityId('');
                     setFilterFidelity('');
-                    setSearchTerm('');
-                    setFilterCandidateId('');
                 }}
                 className="w-full py-3 mt-2 text-xs font-bold text-red-500 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
                >

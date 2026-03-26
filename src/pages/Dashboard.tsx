@@ -35,7 +35,13 @@ export default function Dashboard() {
         { count: coordsCount },
         { count: microsCount }
       ] = await Promise.all([
-        supabase.from('candidates').select('*').order('created_at', { ascending: false }),
+        supabase.from('candidates').select(`
+          *,
+          parties ( name ),
+          positions ( name ),
+          cities ( name ),
+          states ( name )
+        `).order('created_at', { ascending: false }),
         supabase.from('voters').select('*', { count: 'exact', head: true }),
         supabase.from('field_reports').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'coordinator'),
@@ -151,7 +157,6 @@ export default function Dashboard() {
                   <th className="py-3 px-4 font-semibold text-gray-700">Nome</th>
                   <th className="py-3 px-4 font-semibold text-gray-700">Partido</th>
                   <th className="py-3 px-4 font-semibold text-gray-700">Cargo</th>
-                  <th className="py-3 px-4 font-semibold text-gray-700">Cidade</th>
                   <th className="py-3 px-4 font-semibold text-gray-700">Número</th>
                   <th className="py-3 px-4 font-semibold text-gray-700">Status</th>
                 </tr>
@@ -162,7 +167,6 @@ export default function Dashboard() {
                     <td className="py-4 px-4 font-medium">{candidate.name}</td>
                     <td className="py-4 px-4 text-gray-600">{candidate.parties?.name || 'N/A'}</td>
                     <td className="py-4 px-4 text-gray-600">{candidate.positions?.name || 'N/A'}</td>
-                    <td className="py-4 px-4 text-gray-600">{candidate.cities?.name || 'N/A'}</td>
                     <td className="py-4 px-4">
                       <span className="bg-[#def3cd] text-[#1a3d2a] px-3 py-1 rounded-full text-sm font-bold shadow-sm">
                         {candidate.number}

@@ -26,7 +26,7 @@ export default function ControleMateriais() {
   const [materiais, setMateriais] = useState<MaterialCampanha[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [regions, setRegions] = useState<{ id: string, name: string }[]>([]);
-  const [cities, setCities] = useState<{ id: string, name: string, region_id: string }[]>([]);
+  const [coordinators, setCoordinators] = useState<{ id: string, full_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -41,7 +41,7 @@ export default function ControleMateriais() {
   // Filtros
   const [filterCandidateId, setFilterCandidateId] = useState('');
   const [filterRegionId, setFilterRegionId] = useState('');
-  const [filterCityId, setFilterCityId] = useState('');
+  const [filterCoordinatorId, setFilterCoordinatorId] = useState('');
   const [filterType, setFilterType] = useState('');
 
   const [formData, setFormData] = useState({
@@ -52,7 +52,7 @@ export default function ControleMateriais() {
     file: null as File | null,
     candidato_id: '',
     regiao_id: '',
-    cidade_id: ''
+    coordinator_ids: [] as string[]
   });
 
   useEffect(() => {
@@ -66,18 +66,18 @@ export default function ControleMateriais() {
         { data: matData },
         { data: candData },
         { data: regData },
-        { data: cityData }
+        { data: coordData }
       ] = await Promise.all([
-        supabase.from('materiais').select('*, candidates(name, parties(name)), regions(name), cities(name)').order('created_at', { ascending: false }),
+        supabase.from('materiais').select('*, candidates(name, parties(name)), regions(name)').order('created_at', { ascending: false }),
         supabase.from('candidates').select('*, parties(name)'),
         supabase.from('regions').select('*'),
-        supabase.from('cities').select('*')
+        supabase.from('profiles').select('id, full_name').eq('role', 'coordinator').order('full_name')
       ]);
 
       setMateriais(matData || []);
       setCandidates(candData || []);
       setRegions(regData || []);
-      setCities(cityData || []);
+      setCoordinators(coordData || []);
 
       if (isRestricted && profile?.region_id) {
           setFilterRegionId(profile.region_id);
@@ -115,7 +115,7 @@ export default function ControleMateriais() {
       file: null,
       candidato_id: m.candidato_id || '',
       regiao_id: m.regiao_id || '',
-      cidade_id: m.cidade_id || ''
+      coordinator_ids: (m as any).coordinator_ids || []
     });
     setIsModalOpen(true);
   };
@@ -172,7 +172,7 @@ export default function ControleMateriais() {
         url: finalUrl,
         candidato_id: formData.candidato_id || null,
         regiao_id: formData.regiao_id || null,
-        cidade_id: formData.cidade_id || null
+        coordinator_ids: formData.coordinator_ids.length > 0 ? formData.coordinator_ids : null
       };
 
       if (editingId) {
@@ -188,7 +188,7 @@ export default function ControleMateriais() {
 
       setIsModalOpen(false);
       setEditingId(null);
-      setFormData({ titulo: '', descricao: '', tipo: 'Pdf', url: '', file: null, candidato_id: '', regiao_id: '', cidade_id: '' });
+      setFormData({ titulo: '', descricao: '', tipo: 'Pdf', url: '', file: null, candidato_id: '', regiao_id: '', coordinator_ids: [] });
       fetchData();
     } catch (error) {
       console.error('Erro ao salvar material:', error);
@@ -224,21 +224,18 @@ export default function ControleMateriais() {
     const matchesSearch = m.titulo.toLowerCase().includes(searchTerm.toLowerCase()) || m.descricao?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCandidate = !filterCandidateId || m.candidato_id === filterCandidateId;
     
-    // Regla para coordinadores/micros: Solo ven materiales globales o de su región
     if (isRestricted && profile?.region_id) {
         if (m.regiao_id && m.regiao_id !== profile.region_id) return false;
     }
-
-    // Regla para Micros: Solo ven lo compartido por sus coordinadores
     if (isMicro) {
         if (!m.shared_with_micros) return false;
     }
 
     const matchesRegion = !filterRegionId || m.regiao_id === filterRegionId;
-    const matchesCity = !filterCityId || m.cidade_id === filterCityId;
+    const matchesCoord = !filterCoordinatorId || ((m as any).coordinator_ids || []).includes(filterCoordinatorId);
     const matchesType = !filterType || m.tipo === filterType;
     
-    return matchesSearch && matchesCandidate && matchesRegion && matchesCity && matchesType;
+    return matchesSearch && matchesCandidate && matchesRegion && matchesCoord && matchesType;
   });
 
   const getIcon = (tipo: string) => {
@@ -264,7 +261,7 @@ export default function ControleMateriais() {
             <button 
                 onClick={() => {
                     setEditingId(null);
-                    setFormData({ titulo: '', descricao: '', tipo: 'Pdf', url: '', file: null, candidato_id: '', regiao_id: '', cidade_id: '' });
+                    setFormData({ titulo: '', descricao: '', tipo: 'Pdf', url: '', file: null, candidato_id: '', regiao_id: '', coordinator_ids: [] });
                     setIsModalOpen(true);
                 }}
                 className="flex items-center gap-2 bg-[#1a3d2a] text-white px-6 py-3 rounded-xl hover:bg-[#2d5940] transition-all font-bold shadow-lg"
@@ -300,10 +297,7 @@ export default function ControleMateriais() {
           <select 
             value={filterRegionId}
             disabled={isRestricted}
-            onChange={(e) => {
-              setFilterRegionId(e.target.value);
-              setFilterCityId('');
-            }}
+            onChange={(e) => setFilterRegionId(e.target.value)}
             className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-[#45b896] outline-none text-sm font-semibold disabled:bg-gray-100"
           >
             <option value="">Todas as Regiões</option>
@@ -311,14 +305,12 @@ export default function ControleMateriais() {
           </select>
 
           <select 
-            value={filterCityId}
-            onChange={(e) => setFilterCityId(e.target.value)}
+            value={filterCoordinatorId}
+            onChange={(e) => setFilterCoordinatorId(e.target.value)}
             className="px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-[#45b896] outline-none text-sm font-semibold"
           >
-            <option value="">Todas as Cidades</option>
-            {cities
-              .filter(c => !filterRegionId || c.region_id === filterRegionId)
-              .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="">Todos os Coordenadores</option>
+            {coordinators.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
           </select>
 
           <select 
@@ -385,10 +377,18 @@ export default function ControleMateriais() {
                           <MapPin size={10} className="text-blue-400" />
                           <span>{m.regions?.name || 'Todas as Regiões'}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase">
-                          <Building2 size={10} className="text-purple-400" />
-                          <span>{m.cities?.name || 'Todas as Cidades'}</span>
-                        </div>
+                        {((m as any).coordinator_ids?.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {((m as any).coordinator_ids as string[]).map((cid: string) => {
+                              const coord = coordinators.find(c => c.id === cid);
+                              return coord ? (
+                                <span key={cid} className="text-[9px] font-bold bg-[#def3cd] text-[#1a3d2a] px-1.5 py-0.5 rounded-full">
+                                  {coord.full_name.split(' ')[0]}
+                                </span>
+                              ) : null;
+                            })}
+                          </div>
+                        )}
                       </div>
                     </td>
                     {isAdmin && (
@@ -499,7 +499,7 @@ export default function ControleMateriais() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Região (Opcional)</label>
                   <select 
                     value={formData.regiao_id}
-                    onChange={(e) => setFormData({...formData, regiao_id: e.target.value, cidade_id: ''})}
+                    onChange={(e) => setFormData({...formData, regiao_id: e.target.value})}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
                   >
                     <option value="">Todos</option>
@@ -507,18 +507,74 @@ export default function ControleMateriais() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Cidade (Opcional)</label>
-                  <select 
-                    value={formData.cidade_id}
-                    onChange={(e) => setFormData({...formData, cidade_id: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
-                  >
-                    <option value="">Todos</option>
-                    {cities
-                      .filter(c => !formData.regiao_id || c.region_id === formData.regiao_id)
-                      .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Coordenadores (Opcional)
+                    {formData.coordinator_ids.length > 0 && (
+                      <span className="ml-2 text-xs font-bold text-[#45b896]">({formData.coordinator_ids.length} selecionado{formData.coordinator_ids.length > 1 ? 's' : ''})</span>
+                    )}
+                  </label>
+                  {/* Selected chips */}
+                  {formData.coordinator_ids.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {formData.coordinator_ids.map(cid => {
+                        const coord = coordinators.find(c => c.id === cid);
+                        return coord ? (
+                          <span key={cid} className="flex items-center gap-1 bg-[#def3cd] text-[#1a3d2a] text-xs font-bold px-2 py-1 rounded-full">
+                            {coord.full_name}
+                            <button
+                              type="button"
+                              onClick={() => setFormData({...formData, coordinator_ids: formData.coordinator_ids.filter(id => id !== cid)})}
+                              className="hover:text-red-500 transition-colors ml-0.5"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                  {/* Multi-select list */}
+                  <div className="border border-gray-300 rounded-lg overflow-hidden max-h-36 overflow-y-auto">
+                    {coordinators.length === 0 ? (
+                      <p className="text-xs text-gray-400 p-3 italic">Nenhum coordenador cadastrado.</p>
+                    ) : (
+                      coordinators.map(coord => {
+                        const selected = formData.coordinator_ids.includes(coord.id);
+                        return (
+                          <button
+                            key={coord.id}
+                            type="button"
+                            onClick={() => {
+                              const ids = selected
+                                ? formData.coordinator_ids.filter(id => id !== coord.id)
+                                : [...formData.coordinator_ids, coord.id];
+                              setFormData({...formData, coordinator_ids: ids});
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors border-b border-gray-100 last:border-0 ${
+                              selected ? 'bg-[#def3cd] text-[#1a3d2a] font-bold' : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                              selected ? 'bg-[#1a3d2a] border-[#1a3d2a]' : 'border-gray-300'
+                            }`}>
+                              {selected && <span className="text-white text-[10px] font-black">✓</span>}
+                            </div>
+                            {coord.full_name}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                  {formData.coordinator_ids.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, coordinator_ids: []})}
+                      className="mt-1.5 text-xs text-red-400 hover:text-red-600 font-semibold transition-colors"
+                    >
+                      Limpar seleção
+                    </button>
+                  )}
                 </div>
               </div>
 
