@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Candidate, State, CampaignGoal } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Plus, Target, TrendingUp, Users, X, ChevronRight, MapPin } from 'lucide-react';
+import { Plus, Target, TrendingUp, Users, X, ChevronRight, MapPin, Pencil, Trash2 } from 'lucide-react';
 
 export default function MetasEleitorais() {
   const {  } = useAuth();
@@ -12,6 +12,7 @@ export default function MetasEleitorais() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [goals, setGoals] = useState<CampaignGoal[]>([]);
+  const [editingGoal, setEditingGoal] = useState<CampaignGoal | null>(null);
 
   const [formData, setFormData] = useState({
     target_votes: '',
@@ -45,7 +46,6 @@ export default function MetasEleitorais() {
       supabase.from('cities').select('region_id, votantes')
     ]);
 
-    // Map region votantes
     if (regionsData && citiesData) {
       const regionVotantes = regionsData.map(r => {
         const sum = (citiesData as any[])
@@ -64,7 +64,9 @@ export default function MetasEleitorais() {
     setLoading(false);
   };
 
+  // Abrir modal para criar nova meta
   const openModal = (candidate: Candidate | null, type?: 'state' | 'region') => {
+    setEditingGoal(null);
     setSelectedCandidate(candidate);
     setFormData({
       target_votes: '',
@@ -77,36 +79,75 @@ export default function MetasEleitorais() {
     setIsModalOpen(true);
   };
 
+  // Abrir modal para editar meta existente
+  const openEditModal = (goal: CampaignGoal) => {
+    setEditingGoal(goal);
+    const cand = candidates.find(c => c.id === goal.candidate_id) || null;
+    setSelectedCandidate(cand);
+    setFormData({
+      target_votes: String(goal.target_votes),
+      state_id: goal.state_id || '',
+      region_id: goal.region_id || '',
+      candidate_id: goal.candidate_id || '',
+      type: goal.state_id ? 'state' : 'region',
+      deadline: goal.deadline || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  // Confirmar e deletar meta
+  const handleDelete = async (goal: CampaignGoal) => {
+    const isState = !!goal.state_id;
+    const label = isState
+      ? `meta estadual "${goal.states?.name}" (${goal.target_votes.toLocaleString()} votos)`
+      : `meta regional "${goal.regions?.name}" (${goal.target_votes.toLocaleString()} votos)`;
+
+    if (!confirm(`Tem certeza que deseja excluir a ${label}?`)) return;
+
+    setLoading(true);
+    const { error } = await supabase.from('campaign_goals').delete().eq('id', goal.id);
+    if (error) {
+      alert('Erro ao excluir meta');
+      console.error(error);
+    } else {
+      loadData();
+    }
+    setLoading(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const candId = formData.candidate_id || selectedCandidate?.id;
     if (!candId) return;
     setLoading(true);
 
-    const stateGoal = goals.find(g => g.candidate_id === candId && g.state_id);
-    const regionalSum = goals
-      .filter(g => g.candidate_id === candId && g.region_id)
-      .reduce((acc, curr) => acc + (curr.target_votes || 0), 0);
     const newTarget = parseInt(formData.target_votes);
 
-    // Validation for Regional Goal
-    if (formData.type === 'region' && stateGoal) {
-      if (regionalSum + newTarget > stateGoal.target_votes) {
+    // Validações
+    if (formData.type === 'region') {
+      const stateGoal = goals.find(g => g.candidate_id === candId && g.state_id);
+      const regionalSum = goals
+        .filter(g => g.candidate_id === candId && g.region_id && g.id !== editingGoal?.id)
+        .reduce((acc, curr) => acc + (curr.target_votes || 0), 0);
+
+      if (stateGoal && regionalSum + newTarget > stateGoal.target_votes) {
         alert(`Erro: A soma das metas regionais (${(regionalSum + newTarget).toLocaleString()}) não pode ultrapassar a meta estadual (${stateGoal.target_votes.toLocaleString()}). Saldo disponível: ${(stateGoal.target_votes - regionalSum).toLocaleString()} votos.`);
         setLoading(false);
         return;
       }
     }
 
-    // Validation for State Goal
-    if (formData.type === 'state' && regionalSum > newTarget) {
-      if (!confirm(`Aviso: A nova meta estadual (${newTarget.toLocaleString()}) é menor que a soma das metas regionais atuais (${regionalSum.toLocaleString()}). Deseja continuar mesmo assim?`)) {
-        setLoading(false);
-        return;
+    if (formData.type === 'state') {
+      const regionalSum = goals
+        .filter(g => g.candidate_id === candId && g.region_id)
+        .reduce((acc, curr) => acc + (curr.target_votes || 0), 0);
+      if (regionalSum > newTarget) {
+        if (!confirm(`Aviso: A nova meta estadual (${newTarget.toLocaleString()}) é menor que a soma das metas regionais atuais (${regionalSum.toLocaleString()}). Deseja continuar mesmo assim?`)) {
+          setLoading(false);
+          return;
+        }
       }
     }
-
-    const { data: { user } } = await supabase.auth.getUser();
 
     const goalData = {
       candidate_id: candId,
@@ -114,13 +155,18 @@ export default function MetasEleitorais() {
       deadline: formData.deadline || null,
       state_id: (formData.type === 'state' && formData.state_id) ? formData.state_id : null,
       region_id: (formData.type === 'region' && formData.region_id) ? formData.region_id : null,
-      created_by: user?.id
     };
 
-    const { error } = await supabase.from('campaign_goals').insert([goalData]);
+    let error;
+    if (editingGoal) {
+      ({ error } = await supabase.from('campaign_goals').update(goalData).eq('id', editingGoal.id));
+    } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      ({ error } = await supabase.from('campaign_goals').insert([{ ...goalData, created_by: user?.id }]));
+    }
 
     if (error) {
-      alert('Erro ao cadastrar meta');
+      alert('Erro ao salvar meta');
       console.error(error);
     } else {
       setIsModalOpen(false);
@@ -144,7 +190,7 @@ export default function MetasEleitorais() {
                 value={filterStateId}
                 onChange={(e) => {
                   setFilterStateId(e.target.value);
-                  setFilterCandidateId(''); // Reset candidate when state changes
+                  setFilterCandidateId('');
                 }}
                 className="w-full px-4 py-2 bg-white border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-[#45b896] outline-none text-sm font-semibold"
               >
@@ -175,8 +221,6 @@ export default function MetasEleitorais() {
           </button>
         </div>
       </div>
-
-      {/* Grid de Candidatos */}
 
       {/* Grid de Candidatos */}
       <div className="space-y-6">
@@ -228,8 +272,9 @@ export default function MetasEleitorais() {
                 </div>
 
                 <div className="p-6">
+                  {/* Metas Estaduais */}
                   {goals.filter(g => g.candidate_id === cand.id && g.state_id).map(stateGoal => (
-                    <div key={stateGoal.id} className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div key={stateGoal.id} className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border border-blue-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 group">
                       <div className="flex items-center gap-4">
                         <div className="p-3 bg-white rounded-xl shadow-sm border border-blue-100 text-blue-600">
                           <Target size={24} />
@@ -237,15 +282,40 @@ export default function MetasEleitorais() {
                         <div>
                           <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">Meta Estadual</p>
                           <h4 className="text-xl font-black text-[#1a3d2a]">{stateGoal.states?.name}</h4>
+                          {stateGoal.deadline && (
+                            <p className="text-[10px] text-gray-400 font-semibold mt-0.5">
+                              Prazo: {new Date(stateGoal.deadline).toLocaleDateString('pt-BR')}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="text-center md:text-right">
-                        <p className="text-xs text-gray-500 font-medium">Objetivo de Votos</p>
-                        <p className="text-3xl font-black text-blue-700">{stateGoal.target_votes.toLocaleString()}</p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-center md:text-right">
+                          <p className="text-xs text-gray-500 font-medium">Objetivo de Votos</p>
+                          <p className="text-3xl font-black text-blue-700">{stateGoal.target_votes.toLocaleString()}</p>
+                        </div>
+                        {/* Ações */}
+                        <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => openEditModal(stateGoal)}
+                            title="Editar meta"
+                            className="p-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-100 shadow-sm transition-all hover:scale-105"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(stateGoal)}
+                            title="Excluir meta"
+                            className="p-2 bg-white text-red-500 hover:bg-red-50 rounded-lg border border-red-100 shadow-sm transition-all hover:scale-105"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
 
+                  {/* Metas Regionais */}
                   <div className="mt-4">
                     <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
                       <MapPin size={16} className="text-purple-500" /> Detalhamento por Região
@@ -265,17 +335,17 @@ export default function MetasEleitorais() {
                               <th className="px-4 py-3">Meta 2026</th>
                               <th className="px-4 py-3">Progresso</th>
                               <th className="px-4 py-3">Status</th>
+                              <th className="px-4 py-3 text-center">Ações</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y">
                             {goals.filter(g => g.candidate_id === cand.id && g.region_id).map(goal => {
                               const regionData = regions.find(r => r.id === goal.region_id);
-                              // Mocking database for now as I need actual voter counts per region
                               const baseCount = 0; 
                               const progress = goal.target_votes > 0 ? (baseCount / goal.target_votes) * 100 : 0;
                               
                               return (
-                                <tr key={goal.id} className="hover:bg-gray-50 transition-colors">
+                                <tr key={goal.id} className="hover:bg-gray-50 transition-colors group">
                                   <td className="px-4 py-4 font-bold text-[#1a3d2a]">{goal.regions?.name}</td>
                                   <td className="px-4 py-4 text-gray-600">
                                     {regionData?.votantes_total?.toLocaleString() || '0'}
@@ -301,6 +371,24 @@ export default function MetasEleitorais() {
                                       {progress >= 100 ? 'CONCLUÍDO' : 'EM PROGRESSO'}
                                     </span>
                                   </td>
+                                  <td className="px-4 py-4">
+                                    <div className="flex items-center justify-center gap-2">
+                                      <button
+                                        onClick={() => openEditModal(goal)}
+                                        title="Editar meta"
+                                        className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition-all hover:scale-110"
+                                      >
+                                        <Pencil size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDelete(goal)}
+                                        title="Excluir meta"
+                                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-all hover:scale-110"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -316,18 +404,18 @@ export default function MetasEleitorais() {
         )}
       </div>
 
-      {/* Modal Cadastro de Meta */}
+      {/* Modal Cadastro/Edição de Meta */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex justify-center items-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl animate-in fade-in zoom-in duration-300">
             <div className="flex justify-between items-center mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-[#def3cd] text-[#1a3d2a]">
-                  <Target size={20} />
+                  {editingGoal ? <Pencil size={20} /> : <Target size={20} />}
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-[#1a3d2a]">
-                    Cadastrar Meta
+                    {editingGoal ? 'Editar Meta' : 'Cadastrar Meta'}
                   </h3>
                   <p className="text-xs text-gray-500">
                     {selectedCandidate ? `Candidato: ${selectedCandidate.name}` : 'Planejamento Estratégico'}
@@ -344,22 +432,25 @@ export default function MetasEleitorais() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Tipo - desabilitado ao editar */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl mb-4">
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, type: 'state' }))}
+                  onClick={() => !editingGoal && setFormData(prev => ({ ...prev, type: 'state' }))}
+                  disabled={!!editingGoal}
                   className={`py-2 text-sm font-bold rounded-lg transition-all ${
                     formData.type === 'state' ? 'bg-white text-[#1a3d2a] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                  } ${editingGoal ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   Estadual
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, type: 'region' }))}
+                  onClick={() => !editingGoal && setFormData(prev => ({ ...prev, type: 'region' }))}
+                  disabled={!!editingGoal}
                   className={`py-2 text-sm font-bold rounded-lg transition-all ${
                     formData.type === 'region' ? 'bg-white text-[#1a3d2a] shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
+                  } ${editingGoal ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   Regional
                 </button>
@@ -372,6 +463,7 @@ export default function MetasEleitorais() {
                   onChange={(e) => setFormData({ ...formData, candidate_id: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
                   required
+                  disabled={!!editingGoal}
                 >
                   <option value="">Selecione o Candidato...</option>
                   {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -380,7 +472,7 @@ export default function MetasEleitorais() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {formData.type === 'state' ? 'Selecione o Estado' : 'Selecione a Região'}
+                  {formData.type === 'state' ? 'Estado' : 'Região'}
                 </label>
                 {formData.type === 'state' ? (
                   <select 
@@ -388,6 +480,7 @@ export default function MetasEleitorais() {
                     onChange={(e) => setFormData({ ...formData, state_id: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
                     required
+                    disabled={!!editingGoal}
                   >
                     <option value="">Selecione...</option>
                     {states.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -398,6 +491,7 @@ export default function MetasEleitorais() {
                     onChange={(e) => setFormData({ ...formData, region_id: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#45b896] outline-none"
                     required
+                    disabled={!!editingGoal}
                   >
                     <option value="">Selecione...</option>
                     {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -424,10 +518,12 @@ export default function MetasEleitorais() {
                     {(() => {
                       const candId = formData.candidate_id || selectedCandidate?.id;
                       const stateTarget = goals.find(g => g.candidate_id === candId && g.state_id)?.target_votes || 0;
-                      const currentRegSum = goals.filter(g => g.candidate_id === candId && g.region_id).reduce((a, b) => a + b.target_votes, 0);
+                      const currentRegSum = goals
+                        .filter(g => g.candidate_id === candId && g.region_id && g.id !== editingGoal?.id)
+                        .reduce((a, b) => a + b.target_votes, 0);
                       const balance = stateTarget - currentRegSum;
                       
-                      if (stateTarget === 0) return <p className="text-[10px] text-amber-600 font-bold uppercase tracking-tighter">* Candidate sem meta estadual definida</p>;
+                      if (stateTarget === 0) return <p className="text-[10px] text-amber-600 font-bold uppercase tracking-tighter">* Candidato sem meta estadual definida</p>;
                       return (
                         <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-tighter">
                           <span className={balance < 0 ? 'text-red-500' : 'text-blue-500'}>
@@ -465,7 +561,7 @@ export default function MetasEleitorais() {
                   className="px-8 py-2 bg-gradient-to-r from-[#1a3d2a] to-[#45b896] text-white rounded-lg hover:shadow-lg transition-all font-bold flex items-center gap-2"
                   disabled={loading}
                 >
-                  {loading ? 'Salvando...' : 'Salvar Meta'}
+                  {loading ? 'Salvando...' : editingGoal ? 'Atualizar Meta' : 'Salvar Meta'}
                   {!loading && <ChevronRight size={18} />}
                 </button>
               </div>

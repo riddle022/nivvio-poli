@@ -23,20 +23,34 @@ import {
   BarChart3, 
   Map as MapIcon,
   Briefcase,
-  Calendar
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#4ade80', '#22c55e'];
+
+interface Region {
+  id: string;
+  name: string;
+}
 
 export default function MetricasCampanha() {
   const [voters, setVoters] = useState<Voter[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [selectedRegionId, setSelectedRegionId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    fetchRegions();
     fetchData();
   }, []);
+
+  async function fetchRegions() {
+    const { data } = await supabase.from('regions').select('id, name').order('name');
+    setRegions(data || []);
+  }
 
   async function fetchData() {
     try {
@@ -61,17 +75,26 @@ export default function MetricasCampanha() {
     }
   }
 
-  // Processamento de dados para gráficos
+  // Filtrar eleitores pela região selecionada
+  const filteredVoters = selectedRegionId === 'all'
+    ? voters
+    : voters.filter(v => v.region_id === selectedRegionId);
+
+  const selectedRegionName = selectedRegionId === 'all'
+    ? 'Todas as Regiões'
+    : regions.find(r => r.id === selectedRegionId)?.name || 'Região';
+
+  // Processamento de dados para gráficos (usando filteredVoters)
   
   // 1. Distribuição de Fidelidade (Pizza)
   const fidelityData = [1, 2, 3, 4, 5].map(score => ({
     name: `Nível ${score}`,
-    value: voters.filter(v => v.fidelity_score === score).length
+    value: filteredVoters.filter(v => v.fidelity_score === score).length
   })).filter(d => d.value > 0);
 
   // 2. Crescimento Cronológico (Linha) - Agrupado por Data
   const growthData = Object.entries(
-    voters.reduce((acc: any, curr) => {
+    filteredVoters.reduce((acc: any, curr) => {
       const date = new Date(curr.created_at).toLocaleDateString();
       acc[date] = (acc[date] || 0) + 1;
       return acc;
@@ -82,7 +105,7 @@ export default function MetricasCampanha() {
 
   // 3. Desempenho por Cidade (Barra)
   const cityData = Object.entries(
-    voters.reduce((acc: any, curr) => {
+    filteredVoters.reduce((acc: any, curr) => {
       acc[curr.city || 'Outros'] = (acc[curr.city || 'Outros'] || 0) + 1;
       return acc;
     }, {})
@@ -95,13 +118,13 @@ export default function MetricasCampanha() {
     .filter(p => p.role === 'micro')
     .map(p => ({
       name: p.full_name,
-      voters: voters.filter(v => v.created_by === p.id).length
+      voters: filteredVoters.filter(v => v.created_by === p.id).length
     }))
     .sort((a,b) => b.voters - a.voters)
     .slice(0, 5);
 
-  const avgFidelity = voters.length > 0 
-    ? (voters.reduce((acc, curr) => acc + curr.fidelity_score, 0) / voters.length).toFixed(1)
+  const avgFidelity = filteredVoters.length > 0 
+    ? (filteredVoters.reduce((acc, curr) => acc + curr.fidelity_score, 0) / filteredVoters.length).toFixed(1)
     : 0;
 
   if (loading) {
@@ -114,6 +137,7 @@ export default function MetricasCampanha() {
 
   return (
     <div className="p-4 md:p-6 lg:ml-0 pb-20 lg:pb-6 space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#1a3d2a] flex items-center gap-2">
@@ -122,11 +146,50 @@ export default function MetricasCampanha() {
           </h1>
           <p className="text-gray-600 text-sm">Análise de desempenho e engajamento eleitoral</p>
         </div>
-        <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Filtro de Região */}
+          <div className="relative">
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl shadow-sm px-3 py-2 cursor-pointer hover:border-[#45b896] hover:shadow-md transition-all group">
+              <MapIcon size={15} className="text-[#45b896] shrink-0" />
+              <select
+                id="filtro-regiao"
+                value={selectedRegionId}
+                onChange={e => setSelectedRegionId(e.target.value)}
+                className="appearance-none bg-transparent text-sm font-semibold text-[#1a3d2a] cursor-pointer outline-none pr-5 min-w-[160px]"
+              >
+                <option value="all">Todas as Regiões</option>
+                {regions.map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="text-gray-400 absolute right-3 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Data de atualização */}
+          <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-100 flex items-center gap-2">
             <Calendar size={16} className="text-gray-400" />
             <span className="text-xs font-bold text-gray-500">Dados atualizados em {new Date().toLocaleDateString()}</span>
+          </div>
         </div>
       </div>
+
+      {/* Badge de região ativa */}
+      {selectedRegionId !== 'all' && (
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-2 bg-[#def3cd] text-[#1a3d2a] text-xs font-bold px-3 py-1.5 rounded-full border border-[#45b896]/30">
+            <MapIcon size={12} className="text-[#45b896]" />
+            Filtrando por: {selectedRegionName}
+            <button
+              onClick={() => setSelectedRegionId('all')}
+              className="ml-1 text-[#1a3d2a]/50 hover:text-[#1a3d2a] transition-colors font-black leading-none"
+              title="Remover filtro"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cards de KPI */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -136,7 +199,7 @@ export default function MetricasCampanha() {
           </div>
           <div>
             <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Total Eleitores</p>
-            <h3 className="text-2xl font-black text-[#1a3d2a]">{voters.length}</h3>
+            <h3 className="text-2xl font-black text-[#1a3d2a]">{filteredVoters.length}</h3>
           </div>
         </div>
 

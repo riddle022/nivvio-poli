@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { supabase, Voter, Candidate } from '../lib/supabase';
+import { supabase, Voter } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { 
   Users, 
   MapPin, 
-  Search, 
   Loader2, 
   Filter, 
   Layout, 
@@ -100,15 +99,12 @@ function CustomZoomControl({ center, zoom }: { center: [number, number], zoom: n
 export default function MapaRegional() {
   const { profile } = useAuth();
   const [voters, setVoters] = useState<Voter[]>([]);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [cities, setCities] = useState<{ id: string, name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filtros
-  const [filterCandidateId, setFilterCandidateId] = useState('');
   const [filterCityId, setFilterCityId] = useState('');
   const [filterFidelity, setFilterFidelity] = useState<number | ''>('');
-  const [searchTerm, setSearchTerm] = useState('');
 
   // Centro inicial: Paraná
   const mapCenter: [number, number] = [-24.8918, -51.5540];
@@ -138,25 +134,17 @@ export default function MapaRegional() {
       }
 
       // 2. Buscar dados (voters já são filtrados pelo RLS para serem apenas os da região deste coordenador)
-      const promises = [
-        supabase.from('voters').select('*'),
-        supabase.from('candidates').select('*')
-      ];
-
-      if (regionId) {
-        promises.push(supabase.from('cities').select('*').eq('region_id', regionId));
-      } else {
-        promises.push(Promise.resolve({ data: [] as any }));
-      }
+      const votersPromise = supabase.from('voters').select('*');
+      const citiesPromise = regionId
+        ? supabase.from('cities').select('*').eq('region_id', regionId)
+        : Promise.resolve({ data: [] as any });
 
       const [
         { data: vData },
-        { data: candData },
         { data: cityData }
-      ] = await Promise.all(promises);
+      ] = await Promise.all([votersPromise, citiesPromise]);
 
       setVoters(vData || []);
-      setCandidates(candData || []);
       setCities((cityData as any) || []);
     } catch (error) {
       console.error('Erro ao buscar dados do mapa regional:', error);
@@ -171,12 +159,10 @@ export default function MapaRegional() {
 
     if (!lat || !lng) return false;
 
-    const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCandidate = !filterCandidateId || true; 
     const matchesCity = !filterCityId || v.city === cities.find(c => c.id === filterCityId)?.name;
     const matchesFidelity = filterFidelity === '' || v.fidelity_score === filterFidelity;
 
-    return matchesSearch && matchesCandidate && matchesCity && matchesFidelity;
+    return matchesCity && matchesFidelity;
   });
 
   return (
@@ -221,32 +207,6 @@ export default function MapaRegional() {
 
             <div className="space-y-4">
                <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 block mb-1">Buscar Nome</label>
-                  <div className="relative">
-                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                     <input 
-                        type="text" 
-                        placeholder="Nome do eleitor..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#45b896] outline-none transition-all"
-                     />
-                  </div>
-               </div>
-
-               <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 block mb-1">Candidato</label>
-                  <select 
-                    value={filterCandidateId}
-                    onChange={(e) => setFilterCandidateId(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#45b896] outline-none transition-all"
-                  >
-                    <option value="">Todos os Candidatos</option>
-                    {candidates.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-               </div>
-
-               <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 block mb-1">Cidades da Região</label>
                   <select 
                     value={filterCityId}
@@ -281,8 +241,6 @@ export default function MapaRegional() {
                 onClick={() => {
                     setFilterCityId('');
                     setFilterFidelity('');
-                    setSearchTerm('');
-                    setFilterCandidateId('');
                 }}
                 className="w-full py-3 mt-4 text-xs font-bold text-gray-500 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors uppercase tracking-widest"
                >
